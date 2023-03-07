@@ -1,0 +1,43 @@
+###############################################################
+# Settings file for the "TwoWheels" input_server filter addon #
+###############################################################
+
+#-----------------------------------------------------------------------------------
+# General Settings, not mouse model specific.
+#-----------------------------------------------------------------------------------
+
+toggle_wheels 	= false	# exchange the wheels, horizontal becames vertical, etc.
+invert_horizontal	= false	# left move <-> right move
+invert_vertical	= false	# up <-> down
+
+speedup_factor	= 5	# X times faster moves when ACCEL_KEY is held down.
+
+accel_key			= B_LEFT_SHIFT_KEY		# See above.
+wheel_toggle_key	= B_SCROLL_LOCK		# Same as "toggle_wheels", but works "on the fly"
+bypass_key		= B_LEFT_CONTROL_KEY	# Return to Be's behavior when held down.
+
+#-----------------------------------------------------------------------------------
+# Mouse specific settings. Tailor these if your mouse protocol differs from mine.
+#-----------------------------------------------------------------------------------
+
+# X means PHYSICAL horizontal (secondary) wheel, Y means... you guessed it.
+# Up means that the wheels moves "away" from you.
+
+# For Example, for my A4Tech 4D WheelScroll mouse, Be's kb_mouse device generates:
+# x = 0, y = -1 when I move the first wheel up.
+# x = 0, y =  1 when I move the first wheel down.
+# and
+# x = 0, y = -2 when I move the second wheel up.
+# x = 0, y =  2 when I move the second wheel down.
+
+# Wheel # 1 generates:
+x1_up	= 0
+y1_up	= -1
+x1_down	= 0
+y1_down	= 1
+
+# Wheel # 2 generates:
+x2_up	= 0
+y2_up	= -2
+x2_down	= 0
+y2_down	= 2
