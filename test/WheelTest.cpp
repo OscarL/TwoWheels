@@ -1,3 +1,8 @@
+/*
+ * Copyright 2004, 2023, Oscar Lesta, <oscar.lesta@gmail.com>.
+ * Distributed under the terms of the MIT License.
+ */
+
 #include <Application.h>
 #include <StringView.h>
 #include <Window.h>

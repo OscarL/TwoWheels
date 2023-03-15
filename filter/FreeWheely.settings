@@ -1,0 +1,13 @@
+################################################################
+# Settings file for the "FreeWheely" input_server filter addon #
+################################################################
+
+toggle_wheels     = false   # exchange the wheels, horizontal becames vertical, etc.
+invert_horizontal = false   # left move <-> right move
+invert_vertical   = false   # up <-> down
+
+speedup_factor = 5          # X times faster moves when ACCEL_KEY is held down.
+
+accel_key        = B_LEFT_SHIFT_KEY      # See above.
+wheel_toggle_key = B_SCROLL_LOCK         # Same as "toggle_wheels", but works "on the fly"
+bypass_key       = B_LEFT_CONTROL_KEY    # Return to default behavior when held down.

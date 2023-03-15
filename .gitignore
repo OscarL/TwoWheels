@@ -1,4 +1,4 @@
 *.d
 *.o
-filter/TwoWheels
+filter/FreeWheely
 test/WheelTest

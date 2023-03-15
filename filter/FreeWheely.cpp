@@ -1,15 +1,20 @@
-#include <InputServerFilter.h>
-#include <FindDirectory.h>
-#include <Path.h>
+/*
+ * Copyright 2004, 2023, Oscar Lesta, <oscar.lesta@gmail.com>.
+ * Distributed under the terms of the MIT License.
+ */
+
 #include <driver_settings.h>
+#include <FindDirectory.h>
+#include <InputServerFilter.h>
 #include <InterfaceDefs.h>
+#include <Path.h>
 
 #include <string>
 #include <unordered_map>
 
 //------------------------------------------------------------------------------
 
-#define SETTINGS_FILE_NAME "two_wheels.settings"
+#define SETTINGS_FILE_NAME "FreeWheely.settings"
 
 
 struct filter_settings {
@@ -25,13 +30,11 @@ struct filter_settings {
 };
 
 
-class TwoWheels : public BInputServerFilter 
+class FreeWheely : public BInputServerFilter 
 {
 public:
-			TwoWheels();
-
+			FreeWheely();
 	virtual	filter_result Filter(BMessage* message, BList* outList);
-//   	virtual status_t InitCheck();
 private:
 	void	LoadSettings();
 	int32	StringToKey(const char* key);
@@ -41,9 +44,9 @@ private:
 
 //------------------------------------------------------------------------------
 
-BInputServerFilter* instantiate_input_filter()
+extern "C" _EXPORT BInputServerFilter* instantiate_input_filter()
 {
-	return new TwoWheels();
+	return new FreeWheely();
 }
 
 //------------------------------------------------------------------------------
@@ -68,13 +71,13 @@ static std::unordered_map<std::string, int32> sKeys = {
 };
 
 
-TwoWheels::TwoWheels()
+FreeWheely::FreeWheely()
 {
 	LoadSettings();
 }
 
 void
-TwoWheels::LoadSettings()
+FreeWheely::LoadSettings()
 {
 	BPath path;
 	status_t status = find_directory(B_USER_SETTINGS_DIRECTORY, &path);
@@ -108,7 +111,7 @@ TwoWheels::LoadSettings()
 		item = get_driver_parameter(handle, "accel_key", "", "");
 		fSettings.accel_key = StringToKey(item);
 
-		item = get_driver_parameter(handle, "wheel_toggle_key", "B_SCROLL_LOCK", "");
+		item = get_driver_parameter(handle, "wheel_toggle_key", "B_SCROLL_LOCK", "B_SCROLL_LOCK");
 		fSettings.wheel_toggle_key = StringToKey(item);
 
 		item = get_driver_parameter(handle, "bypass_key", "", "");
@@ -120,7 +123,7 @@ TwoWheels::LoadSettings()
 }
 
 int32
-TwoWheels::StringToKey(const char* key)
+FreeWheely::StringToKey(const char* key)
 {
 	if (key == NULL)
 		return 0;
@@ -130,7 +133,7 @@ TwoWheels::StringToKey(const char* key)
 
 
 filter_result
-TwoWheels::Filter(BMessage* message, BList* outList)
+FreeWheely::Filter(BMessage* message, BList* outList)
 {
 	filter_result result = B_DISPATCH_MESSAGE;
 	uint32 mods = modifiers();
@@ -141,25 +144,25 @@ TwoWheels::Filter(BMessage* message, BList* outList)
 		{
 			case B_MOUSE_WHEEL_CHANGED:
 			{
-				float delta_x = 0, delta_y = 0;
-				float wheel_delta_x = 0, wheel_delta_y = 0;
+				float delta_x = 0;
+				float delta_y = 0;
 
 				if ((message->FindFloat("be:wheel_delta_x", &delta_x) != B_OK) ||
 					(message->FindFloat("be:wheel_delta_y", &delta_y) != B_OK))
 					break;
-
-				// Do we need to toggle wheels?
-				bool tk = (mods & fSettings.wheel_toggle_key);
-				bool tg = fSettings.toggle_wheels;
-				bool toggle = (tk ? (tg ? false : true) : tg);
 
 				if (fSettings.speedup && (mods & fSettings.accel_key)) {
 					delta_x *= fSettings.speedup;
 					delta_y *= fSettings.speedup;
 				}
 
-				wheel_delta_x = toggle ? delta_y : delta_x;
-				wheel_delta_y = toggle ? delta_x : delta_y;
+				// Do we need to toggle wheels?
+				bool tk = (mods & fSettings.wheel_toggle_key);
+				bool tg = fSettings.toggle_wheels;
+				bool toggle = (tk ? (tg ? false : true) : tg);
+
+				float wheel_delta_x = toggle ? delta_y : delta_x;
+				float wheel_delta_y = toggle ? delta_x : delta_y;
 
 				// don't multiply by -1 if wheel_delta == 0.
 				if (fSettings.invert_horizontal && wheel_delta_x)

@@ -1,7 +1,7 @@
 ## BeOS Generic Makefile v2.2 ##
-NAME= ../TwoWheels
+NAME= ../FreeWheely
 TYPE= SHARED
-SRCS= TwoWheels.cpp
+SRCS= FreeWheely.cpp
 LIBS= _APP_ be root
 OPTIMIZE= FULL
 DEFINES= 
