@@ -1,8 +1,8 @@
 ## BeOS Generic Makefile v2.2 ##
 NAME= ../TwoWheels
 TYPE= SHARED
-SRCS= TwoWheels.cpp driver_settings.c 
-LIBS= _APP_ be
+SRCS= TwoWheels.cpp
+LIBS= _APP_ be root
 OPTIMIZE= FULL
 DEFINES= 
 WARNINGS = 

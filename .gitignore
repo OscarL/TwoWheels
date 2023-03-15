@@ -1,2 +1,4 @@
-.d
-.o
+*.d
+*.o
+filter/TwoWheels
+test/WheelTest
