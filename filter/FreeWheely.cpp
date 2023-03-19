@@ -4,17 +4,41 @@
  */
 
 #include <driver_settings.h>
+#include <File.h>
 #include <FindDirectory.h>
 #include <InputServerFilter.h>
 #include <InterfaceDefs.h>
+#include <Looper.h>
+#include <NodeMonitor.h>
 #include <Path.h>
+#include <syslog.h>
 
 #include <string>
 #include <unordered_map>
 
 //------------------------------------------------------------------------------
 
+#define DO_TRACES 0
+#ifdef DO_TRACES
+	#define TRACE(x...)	syslog(LOG_INFO, "FreeWheelyFilter: " x)
+#else
+	#define TRACE(x...)
+#endif
+
 #define SETTINGS_FILE_NAME "FreeWheely.settings"
+
+//------------------------------------------------------------------------------
+
+
+class FreeWheelyFilter;
+
+class SettingsMonitor : public BLooper {
+public:
+					SettingsMonitor(FreeWheelyFilter* filter);
+	virtual	void	MessageReceived(BMessage* message);
+private:
+	FreeWheelyFilter* fFilter;
+};
 
 
 struct filter_settings {
@@ -30,26 +54,55 @@ struct filter_settings {
 };
 
 
-class FreeWheely : public BInputServerFilter 
-{
+class FreeWheelyFilter : public BInputServerFilter {
 public:
-			FreeWheely();
-	virtual	filter_result Filter(BMessage* message, BList* outList);
-private:
-	void	LoadSettings();
-	int32	StringToKey(const char* key);
+								FreeWheelyFilter();
+	virtual						~FreeWheelyFilter();
+	virtual	filter_result		Filter(BMessage* message, BList* outList);
 
-	filter_settings fSettings;
+private:
+			void				_LoadSettings();
+			int32				_StringToKey(const char* key);
+
+			filter_settings 	fSettings;
+			SettingsMonitor*	fSettingsMonitor;
+
+	friend class SettingsMonitor;
 };
 
 //------------------------------------------------------------------------------
+//	#pragma mark -
 
 extern "C" _EXPORT BInputServerFilter* instantiate_input_filter()
 {
-	return new FreeWheely();
+	TRACE("Instantiating");
+	return new FreeWheelyFilter();
 }
 
 //------------------------------------------------------------------------------
+//	#pragma mark -
+
+SettingsMonitor::SettingsMonitor(FreeWheelyFilter* filter)
+	: BLooper("SettingsMonitor Looper", B_LOW_PRIORITY),
+	fFilter(filter)
+{
+}
+
+
+void
+SettingsMonitor::MessageReceived(BMessage* message)
+{
+	switch (message->what) {
+		case B_NODE_MONITOR:
+			fFilter->_LoadSettings();
+			break;
+		default:
+			BLooper::MessageReceived(message);
+	}
+}
+
+//------------------------------------------------------------------------------
+//	#pragma mark -
 
 static std::unordered_map<std::string, int32> sKeys = {
 	{ "B_SHIFT_KEY", B_SHIFT_KEY },
@@ -71,59 +124,79 @@ static std::unordered_map<std::string, int32> sKeys = {
 };
 
 
-FreeWheely::FreeWheely()
+FreeWheelyFilter::FreeWheelyFilter()
 {
-	LoadSettings();
+	fSettingsMonitor = new SettingsMonitor(this);
+	fSettingsMonitor->Run();
+	_LoadSettings();
+	TRACE("Starting");
 }
 
-void
-FreeWheely::LoadSettings()
+
+FreeWheelyFilter::~FreeWheelyFilter()
 {
-	BPath path;
-	status_t status = find_directory(B_USER_SETTINGS_DIRECTORY, &path);
-	if (status == B_OK)
-		path.Append(SETTINGS_FILE_NAME);
-	else
-		path.SetTo("/boot/home/config/settings/" SETTINGS_FILE_NAME);
+	stop_watching(NULL, fSettingsMonitor);
+	fSettingsMonitor->Quit();
+	TRACE("Stopping");
+}
 
-	int fd = open(path.Path(), O_RDONLY);
-	if (fd <= 0)
-		return;
 
-	void* handle = load_driver_settings_file(fd);
+void
+FreeWheelyFilter::_LoadSettings()
+{
+	void* handle = NULL;
 
-	if (handle != NULL)	{
-		const char* item;
-		char* end;
-		int32 value;
+	BPath settingsPath;
+	if (find_directory(B_USER_SETTINGS_DIRECTORY, &settingsPath) == B_OK) {
+		settingsPath.Append(SETTINGS_FILE_NAME);
 
-		fSettings.toggle_wheels = get_driver_boolean_parameter(handle, "toggle_wheels", false, true);
-		fSettings.invert_horizontal = get_driver_boolean_parameter(handle, "invert_horizontal", false, true);
-		fSettings.invert_vertical = get_driver_boolean_parameter(handle, "invert_vertical", false, true);
+		BFile settingsFile;
+		if (settingsFile.SetTo(settingsPath.Path(), B_READ_ONLY) == B_OK)
+			handle = load_driver_settings_file(settingsFile.Dup());
 
-		// SpeedUp Factor
-		item = get_driver_parameter(handle, "speedup_factor", "2", "0");
-		value = strtoul(item, &end, 0);
-		if (*end == '\0')
-			fSettings.speedup = value;
-
-		// Keys
-		item = get_driver_parameter(handle, "accel_key", "", "");
-		fSettings.accel_key = StringToKey(item);
-
-		item = get_driver_parameter(handle, "wheel_toggle_key", "B_SCROLL_LOCK", "B_SCROLL_LOCK");
-		fSettings.wheel_toggle_key = StringToKey(item);
-
-		item = get_driver_parameter(handle, "bypass_key", "", "");
-		fSettings.bypass_key = StringToKey(item);
+		stop_watching(NULL, fSettingsMonitor);
+		node_ref ref;
+		settingsFile.GetNodeRef(&ref);
+		if (watch_node(&ref, B_WATCH_ALL, NULL, fSettingsMonitor) != B_OK)
+			syslog(LOG_ERR, "FreeWheelyFilter: Unable to start node monitoring");
 	}
 
+	if (handle == NULL) {
+		fSettings = {};	// Filter won't do anything unless the setting file can be read.
+		return;
+	}
+
+	const char* setting;
+	char* end;
+	int32 value;
+
+	fSettings.toggle_wheels = get_driver_boolean_parameter(handle, "toggle_wheels", false, true);
+	fSettings.invert_horizontal = get_driver_boolean_parameter(handle, "invert_horizontal", false, true);
+	fSettings.invert_vertical = get_driver_boolean_parameter(handle, "invert_vertical", false, true);
+
+	// SpeedUp Factor
+	setting = get_driver_parameter(handle, "speedup_factor", "2", "0");
+	value = strtoul(setting, &end, 0);
+	if (*end == '\0')
+		fSettings.speedup = value;
+
+	// Keys
+	setting = get_driver_parameter(handle, "accel_key", "", "");
+	fSettings.accel_key = _StringToKey(setting);
+
+	setting = get_driver_parameter(handle, "wheel_toggle_key", "B_SCROLL_LOCK", "B_SCROLL_LOCK");
+	fSettings.wheel_toggle_key = _StringToKey(setting);
+
+	setting = get_driver_parameter(handle, "bypass_key", "", "");
+	fSettings.bypass_key = _StringToKey(setting);
+
 	unload_driver_settings(handle);
-	close(fd);
+
+	TRACE("Loaded Settings");
 }
 
 int32
-FreeWheely::StringToKey(const char* key)
+FreeWheelyFilter::_StringToKey(const char* key)
 {
 	if (key == NULL)
 		return 0;
@@ -133,7 +206,7 @@ FreeWheely::StringToKey(const char* key)
 
 
 filter_result
-FreeWheely::Filter(BMessage* message, BList* outList)
+FreeWheelyFilter::Filter(BMessage* message, BList* outList)
 {
 	filter_result result = B_DISPATCH_MESSAGE;
 	uint32 mods = modifiers();
