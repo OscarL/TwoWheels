@@ -6,7 +6,9 @@ This simple `input_server` filter allows you to:
  - Speed up the scrolling by your choosen factor (only when you ask it to).
  - Toggle your Vertical / Horizontal wheel(s). Works even if you only have one.
 
-Code quality might not be the best, but it is pretty short, so it might serve as an example/template for other people's filters?
+Code quality ~might not be the best~ is not so bad now, ~but~ and it is pretty short, so it might serve as an example/template for other people's filters?
+
+It even does auto-reloading of its settings file now! Groovy!
 
 
 ## Installation
