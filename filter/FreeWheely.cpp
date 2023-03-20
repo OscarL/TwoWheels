@@ -6,6 +6,7 @@
 #include <driver_settings.h>
 #include <File.h>
 #include <FindDirectory.h>
+#include <Handler.h>
 #include <InputServerFilter.h>
 #include <InterfaceDefs.h>
 #include <Looper.h>
@@ -29,18 +30,6 @@
 
 //------------------------------------------------------------------------------
 
-
-class FreeWheelyFilter;
-
-class SettingsMonitor : public BLooper {
-public:
-					SettingsMonitor(FreeWheelyFilter* filter);
-	virtual	void	MessageReceived(BMessage* message);
-private:
-	FreeWheelyFilter* fFilter;
-};
-
-
 struct filter_settings {
 	bool toggle_wheels;
 	bool invert_horizontal;
@@ -54,20 +43,18 @@ struct filter_settings {
 };
 
 
-class FreeWheelyFilter : public BInputServerFilter {
+class FreeWheelyFilter : public BInputServerFilter, BHandler {
 public:
 								FreeWheelyFilter();
 	virtual						~FreeWheelyFilter();
 	virtual	filter_result		Filter(BMessage* message, BList* outList);
-
+	virtual	void				MessageReceived(BMessage* message);
 private:
 			void				_LoadSettings();
 			int32				_StringToKey(const char* key);
 
 			filter_settings 	fSettings;
-			SettingsMonitor*	fSettingsMonitor;
-
-	friend class SettingsMonitor;
+			BLooper*			fSettingsWatcher;
 };
 
 //------------------------------------------------------------------------------
@@ -77,28 +64,6 @@ extern "C" _EXPORT BInputServerFilter* instantiate_input_filter()
 {
 	TRACE("Instantiating");
 	return new FreeWheelyFilter();
-}
-
-//------------------------------------------------------------------------------
-//	#pragma mark -
-
-SettingsMonitor::SettingsMonitor(FreeWheelyFilter* filter)
-	: BLooper("SettingsMonitor Looper", B_LOW_PRIORITY),
-	fFilter(filter)
-{
-}
-
-
-void
-SettingsMonitor::MessageReceived(BMessage* message)
-{
-	switch (message->what) {
-		case B_NODE_MONITOR:
-			fFilter->_LoadSettings();
-			break;
-		default:
-			BLooper::MessageReceived(message);
-	}
 }
 
 //------------------------------------------------------------------------------
@@ -125,9 +90,13 @@ static std::unordered_map<std::string, int32> sKeys = {
 
 
 FreeWheelyFilter::FreeWheelyFilter()
+	: BInputServerFilter(),
+	BHandler(),
+	fSettingsWatcher(new BLooper("SettingsMonitor Looper", B_LOW_PRIORITY))
 {
-	fSettingsMonitor = new SettingsMonitor(this);
-	fSettingsMonitor->Run();
+	fSettingsWatcher->AddHandler(this);
+	fSettingsWatcher->SetPreferredHandler(this);
+	fSettingsWatcher->Run();
 	_LoadSettings();
 	TRACE("Starting");
 }
@@ -135,8 +104,9 @@ FreeWheelyFilter::FreeWheelyFilter()
 
 FreeWheelyFilter::~FreeWheelyFilter()
 {
-	stop_watching(NULL, fSettingsMonitor);
-	fSettingsMonitor->Quit();
+	stop_watching(NULL, fSettingsWatcher);
+	LockLooper();
+	fSettingsWatcher->Quit();
 	TRACE("Stopping");
 }
 
@@ -154,10 +124,10 @@ FreeWheelyFilter::_LoadSettings()
 		if (settingsFile.SetTo(settingsPath.Path(), B_READ_ONLY) == B_OK)
 			handle = load_driver_settings_file(settingsFile.Dup());
 
-		stop_watching(NULL, fSettingsMonitor);
+		stop_watching(NULL, fSettingsWatcher);
 		node_ref ref;
 		settingsFile.GetNodeRef(&ref);
-		if (watch_node(&ref, B_WATCH_ALL, NULL, fSettingsMonitor) != B_OK)
+		if (watch_node(&ref, B_WATCH_ALL, NULL, fSettingsWatcher) != B_OK)
 			syslog(LOG_ERR, "FreeWheelyFilter: Unable to start node monitoring");
 	}
 
@@ -249,4 +219,17 @@ FreeWheelyFilter::Filter(BMessage* message, BList* outList)
 		}
 	}
 	return result;
+}
+
+
+void
+FreeWheelyFilter::MessageReceived(BMessage* message)
+{
+	switch (message->what) {
+		case B_NODE_MONITOR:
+			_LoadSettings();
+			break;
+		default:
+			BHandler::MessageReceived(message);
+	}
 }
